@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- iOS / iPadOS PWA Full Screen Capability -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="iFlow IPTV">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    
+    <!-- PWA Web Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#00BFFF">
+    
+    <title>iFlow IPTV - Universal Apple Player</title>
+    
+    <!-- HLS.js for HLS playback -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <!-- Shaka Player for MPEG-DASH / Advanced HLS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0b0e14;
+            --panel-bg: rgba(18, 22, 31, 0.88);
+            --accent-blue: #00BFFF;
+            --accent-green: #00E676;
+            --accent-red: #FF3B30;
+            --text-main: #FFFFFF;
+            --text-sub: #A0AAB8;
+            --border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: var(--text-main);
+            overflow: hidden;
+            position: fixed;
+        }
+
+        /* Full Screen Video Surface */
+        #player-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #000;
+            z-index: 1;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            outline: none;
+        }
+
+        video.aspect-stretch {
+            object-fit: fill !important;
+        }
+
+        video.aspect-16-9 {
+            aspect-ratio: 16 / 9;
+        }
+
+        video.aspect-4-3 {
+            aspect-ratio: 4 / 3;
+        }
+
+        /* Speedometer Badge (Bottom-Right, exactly matching Android Beta 3.20) */
+        #speed-badge {
+            position: absolute;
+            bottom: 24px;
+            right: 28px;
+            background: rgba(0, 0, 0, 0.72);
+            border: 1px solid rgba(0, 191, 255, 0.4);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #00E5FF;
+            z-index: 10;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Top Bar Overlay */
+        #top-overlay {
+            position: absolute;
+            top: env(safe-area-inset-top, 16px);
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .action-pill {
+            pointer-events: auto;
+            background: rgba(20, 24, 33, 0.85);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 10px 18px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #FFF;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+            transition: transform 0.15s ease, background 0.15s ease;
+        }
+
+        .action-pill:active {
+            transform: scale(0.96);
+            background: rgba(0, 191, 255, 0.25);
+        }
+
+        /* 3-Column IPTV Navigation Drawer */
+        #drawer-panel {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 75%;
+            max-width: 680px;
+            min-width: 480px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-right: 1px solid var(--border-color);
+            z-index: 30;
+            display: flex;
+            flex-direction: row;
+            transform: translateX(-100%);
+            transition: transform 0.28s cubic-bezier(0.1, 0.9, 0.2, 1);
+            box-shadow: 15px 0 35px rgba(0,0,0,0.6);
+        }
+
+        #drawer-panel.open {
+            transform: translateX(0);
+        }
+
+        /* Group Sidebar Column (Left) */
+        .group-column {
+            width: 200px;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            background: rgba(12, 15, 22, 0.95);
+        }
+
+        .sidebar-header {
+            padding: 24px 16px 14px;
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--accent-blue);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .group-list {
+            flex: 1;
+            overflow-y: auto;
+            list-style: none;
+        }
+
+        .group-item {
+            padding: 14px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-sub);
+            border-left: 4px solid transparent;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .group-item.active {
+            background: rgba(0, 191, 255, 0.15);
+            color: #FFF;
+            border-left-color: var(--accent-blue);
+        }
+
+        /* Channels Column (Right) */
+        .channel-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .channel-search-box {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .channel-search-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            padding: 10px 14px;
+            color: #FFF;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .channel-list {
+            flex: 1;
+            overflow-y: auto;
+            list-style: none;
+        }
+
+        .channel-item {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            transition: background 0.15s ease;
+        }
+
+        .channel-item.active {
+            background: rgba(0, 191, 255, 0.2);
+            border-left: 4px solid var(--accent-blue);
+        }
+
+        .channel-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #FFF;
+        }
+
+        .channel-epg-now {
+            font-size: 12px;
+            color: var(--accent-green);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Quick Settings Panel (Slide-out from Right, matching Windows Beta 3.13) */
+        #qs-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 340px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-left: 1px solid var(--border-color);
+            z-index: 40;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            transition: transform 0.25s cubic-bezier(0.1, 0.9, 0.2, 1);
+            padding: 24px 20px;
+            gap: 16px;
+            box-shadow: -15px 0 35px rgba(0,0,0,0.6);
+        }
+
+        #qs-panel.open {
+            transform: translateX(0);
+        }
+
+        .qs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .qs-header h2 {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--accent-blue);
+        }
+
+        .qs-close-btn {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #FFF;
+            width: 32px;
+            height: 32px;
+            border-radius: 16px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .qs-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 14px 16px;
+            color: #FFF;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.15s ease;
+        }
+
+        .qs-btn:active {
+            background: rgba(0, 191, 255, 0.3);
+            border-color: var(--accent-blue);
+        }
+
+        /* EPG Bottom OSD Info Bar */
+        #epg-osd {
+            position: absolute;
+            left: 24px;
+            right: 24px;
+            bottom: 24px;
+            background: rgba(14, 18, 25, 0.92);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            padding: 18px 24px;
+            z-index: 25;
+            display: flex;
+            gap: 20px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        #epg-osd.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .epg-now-col {
+            flex: 1;
+        }
+
+        .epg-divider {
+            width: 2px;
+            background: #FFFFFF; /* High-contrast white divider */
+            opacity: 0.8;
+        }
+
+        .epg-next-col {
+            flex: 1;
+        }
+
+        .epg-badge {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--accent-blue);
+            margin-bottom: 4px;
+        }
+
+        .epg-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #FFF;
+            margin-bottom: 6px;
+        }
+
+        .epg-time {
+            font-size: 13px;
+            color: var(--text-sub);
+        }
+
+        /* Backdrop Dimmer */
+        #backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 28;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        #backdrop.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Video Surface -->
+    <div id="player-container">
+        <video id="video-player" playsinline webkit-playsinline autoplay></video>
+    </div>
+
+    <!-- Speedometer Badge -->
+    <div id="speed-badge">
+        <span>⬇</span> <span id="speed-val">0.0 KB/s</span>
+    </div>
+
+    <!-- Top Overlay Action Bar -->
+    <div id="top-overlay">
+        <div class="action-pill" id="btn-open-menu">
+            <span>📺</span> <span id="label-channel-current">Menu / 频道列表</span>
+        </div>
+        <div class="action-pill" id="btn-open-qs">
+            <span>⚙️</span> <span>Quick Settings</span>
+        </div>
+    </div>
+
+    <!-- Backdrop Dimmer -->
+    <div id="backdrop"></div>
+
+    <!-- 3-Column Navigation Drawer -->
+    <div id="drawer-panel">
+        <div class="group-column">
+            <div class="sidebar-header">
+                <span>Categories</span>
+            </div>
+            <ul class="group-list" id="group-list">
+                <!-- Injected dynamically -->
+            </ul>
+        </div>
+        <div class="channel-column">
+            <div class="channel-search-box">
+                <input type="text" class="channel-search-input" id="channel-search" placeholder="🔍 Search Channels / 搜索频道...">
+            </div>
+            <ul class="channel-list" id="channel-list">
+                <!-- Injected dynamically -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Quick Settings Slide-out -->
+    <div id="qs-panel">
+        <div class="qs-header">
+            <h2>Quick Settings / 快捷设置</h2>
+            <button class="qs-close-btn" id="btn-close-qs">✕</button>
+        </div>
+
+        <button class="qs-btn" id="btn-settings">
+            <span>⚙️ Settings / 播放源设置</span>
+            <span>➔</span>
+        </button>
+
+        <button class="qs-btn" id="btn-aspect">
+            <span>📐 Aspect Ratio</span>
+            <span id="aspect-val" style="color:var(--accent-blue)">Default</span>
+        </button>
+
+        <button class="qs-btn" id="btn-engine">
+            <span>🚀 Engine Mode</span>
+            <span id="engine-val" style="color:var(--accent-green)">Auto Router</span>
+        </button>
+
+        <button class="qs-btn" id="btn-reload">
+            <span>🔄 Reload Playlist</span>
+            <span>⟳</span>
+        </button>
+
+        <button class="qs-btn" id="btn-pip">
+            <span>🔲 Picture-in-Picture</span>
+            <span>PiP</span>
+        </button>
+
+        <button class="qs-btn" id="btn-airplay">
+            <span>📡 AirPlay / Cast</span>
+            <span>AirPlay</span>
+        </button>
+    </div>
+
+    <!-- Settings Dialog Modal -->
+    <div id="settings-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:100; align-items:center; justify-content:center; backdrop-filter:blur(15px); -webkit-backdrop-filter:blur(15px);">
+        <div style="background:var(--panel-bg); border:1px solid var(--border-color); border-radius:20px; width:90%; max-width:540px; padding:24px; display:flex; flex-direction:column; gap:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="font-size:18px; font-weight:800; color:var(--accent-blue);">IPTV Source Settings / 播放源设置</h3>
+                <button id="btn-close-settings" style="background:rgba(255,255,255,0.1); border:none; color:#FFF; width:30px; height:30px; border-radius:15px; cursor:pointer;">✕</button>
+            </div>
+            <div>
+                <label style="font-size:13px; font-weight:600; color:var(--text-sub); display:block; margin-bottom:6px;">Playlist URL (M3U / M3U8):</label>
+                <input type="text" id="input-playlist-url" placeholder="https://example.com/playlist.m3u" style="width:100%; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:12px; color:#FFF; font-size:14px; outline:none;">
+            </div>
+            <div>
+                <label style="font-size:13px; font-weight:600; color:var(--text-sub); display:block; margin-bottom:6px;">EPG URL (XMLTV / XML / GZ):</label>
+                <input type="text" id="input-epg-url" placeholder="https://example.com/epg.xml" style="width:100%; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:10px; padding:12px; color:#FFF; font-size:14px; outline:none;">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:10px;">
+                <button id="btn-save-settings" style="background:var(--accent-blue); border:none; border-radius:12px; padding:12px 24px; color:#000; font-weight:800; font-size:15px; cursor:pointer;">Save & Reload / 保存并加载</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EPG OSD Bottom Bar -->
+    <div id="epg-osd">
+        <div class="epg-now-col">
+            <div class="epg-badge">Now Playing / 正在播出</div>
+            <div class="epg-title" id="osd-now-title">Loading EPG...</div>
+            <div class="epg-time" id="osd-now-time">--:-- - --:--</div>
+        </div>
+        <div class="epg-divider"></div>
+        <div class="epg-next-col">
+            <div class="epg-badge">Up Next / 即将播出</div>
+            <div class="epg-title" id="osd-next-title">Program schedule</div>
+            <div class="epg-time" id="osd-next-time">--:-- - --:--</div>
+        </div>
+    </div>
+
+    <!-- Application Engine Script -->
+    <script src="/app.js"></script>
+
+    <!-- Register Service Worker -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration:', err));
+        }
+    </script>
+</body>
+</html>

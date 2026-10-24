@@ -1,0 +1,11 @@
+{
+  "appId": "com.eth.iptv.apple",
+  "appName": "iFlow IPTV",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "always",
+    "allowsLinkPreview": false,
+    "scrollEnabled": false
+  }
+}

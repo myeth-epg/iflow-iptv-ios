@@ -1,0 +1,19 @@
+{
+  "name": "iflow-iptv-apple",
+  "version": "1.0.0",
+  "description": "iFlow IPTV Universal Player for Apple (macOS & iPadOS / iOS)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3"
+  }
+}

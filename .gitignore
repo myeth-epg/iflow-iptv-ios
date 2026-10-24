@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# iOS & Xcode build artifacts
+ios/App/build/
+ios/App/DerivedData/
+ios/App/Payload/
+ios/App/*.ipa
+*.ipa
+.DS_Store
+
+# Temporary configs
+user_config.json
