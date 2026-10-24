@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Dependencies
         run: |
@@ -34,8 +34,8 @@ jobs:
       - name: Build and Package IPA (Ad-Hoc / Sideloading)
         run: |
           cd ios/App
-          # Clean and build unsigned .app bundle
-          xcodebuild -workspace App.xcworkspace \
+          # Build project directly using project file
+          xcodebuild -project App.xcodeproj \
             -scheme App \
             -configuration Release \
             -destination 'generic/platform=iOS' \
